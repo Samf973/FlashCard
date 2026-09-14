@@ -237,7 +237,7 @@ dialog .check{color:var(--ink);font-size:1rem}
 <script>
 (() => {
 'use strict';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const APP_DATE = '14/09/2026';
 const INTERVALS = [0, 1, 2, 4, 8, 16, 32, 64]; // jours d'attente par niveau
 const MAXLVL = INTERVALS.length - 1;
@@ -411,18 +411,28 @@ function persistDeck(d) { d.updated = now(); state.decks[d.id] = d; dbPut('decks
 function removeDeck(id) { delete state.decks[id]; dbDel('decks', id).catch(() => {}); }
 
 /* ---------- Modèle de révision ---------- */
-const isDue = c => (c.due || 0) <= now();
-const status = c => !c.n ? 'new' : c.lvl >= KNOWN ? 'known' : 'learning';
-const dueCount = d => d.cards.filter(isDue).length;
-function fmtDue(c) {
-  if (!c.n) return '<span class="muted">nouveau</span>';
-  const days = Math.ceil((c.due - now()) / DAY);
-  if (c.due <= now()) { const late = Math.floor((now() - c.due) / DAY); return late >= 1 ? `<span class="due-late">en retard (${late} j)</span>` : '<span class="due-today">aujourd\'hui</span>'; }
+// Chaque verset a deux « sens » de révision, avec une progression séparée :
+//  - 'ref'  : on montre la référence, il faut réciter le texte (état porté par la carte elle-même : lvl, n, due)
+//  - 'text' : on montre le texte, il faut retrouver la référence (état dans c.rev)
+const sideState = (c, side) => side === 'text' ? (c.rev || (c.rev = { lvl: 0, n: 0, due: 0 })) : c;
+const deckSides = d => d.dir === 'text' ? ['text'] : (d.dir === 'both' || d.dir === 'mix') ? ['ref', 'text'] : ['ref'];
+const stDue = st => (st.due || 0) <= now();
+const isDue = (c, d) => deckSides(d).some(s => stDue(sideState(c, s)));
+const status = (c, d) => { const sts = deckSides(d).map(s => sideState(c, s)); if (sts.every(s => !s.n)) return 'new'; if (sts.every(s => s.lvl >= KNOWN)) return 'known'; return 'learning'; };
+const dueCount = d => d.cards.filter(c => isDue(c, d)).length;
+function fmtDue(c, d) {
+  const sts = deckSides(d).map(s => sideState(c, s));
+  if (sts.every(s => !s.n)) return '<span class="muted">nouveau</span>';
+  const due = Math.min(...sts.map(s => s.n ? s.due : 0));
+  const days = Math.ceil((due - now()) / DAY);
+  if (due <= now()) { const late = Math.floor((now() - due) / DAY); return late >= 1 ? `<span class="due-late">en retard (${late} j)</span>` : '<span class="due-today">aujourd\'hui</span>'; }
   if (days <= 1) return 'demain';
   if (days < 30) return `dans ${days} j`;
   return `dans ${Math.round(days / 30)} mois`;
 }
-const lvlBars = c => '<span class="lvl" aria-label="niveau ' + (c.lvl||0) + '">' + Array.from({length: MAXLVL}, (_, i) => `<i class="${i < (c.lvl||0) ? 'f' : ''}" style="height:${5 + i * 1.3}px"></i>`).join('') + '</span>';
+const SIDE_LABEL = { ref: 'Référence → texte', text: 'Texte → référence' };
+const bars = (st, label) => `<span class="lvl" title="${label} : niveau ${st.lvl||0}" aria-label="${label} : niveau ${st.lvl||0}">` + Array.from({length: MAXLVL}, (_, i) => `<i class="${i < (st.lvl||0) ? 'f' : ''}" style="height:${5 + i * 1.3}px"></i>`).join('') + '</span>';
+const lvlBars = (c, d) => deckSides(d).map(s => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px"><span class="small muted">${s === 'ref' ? 'R→T' : 'T→R'}</span>${bars(sideState(c, s), SIDE_LABEL[s])}</span>`).join('');
 function grade(card, g) {
   card.n = (card.n || 0) + 1;
   let lvl = card.lvl || 0;
@@ -496,7 +506,7 @@ function renderDecks() {
   const decks = Object.values(state.decks).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   const total = decks.reduce((n, d) => n + d.cards.length, 0);
   const due = decks.reduce((n, d) => n + dueCount(d), 0);
-  const known = decks.reduce((n, d) => n + d.cards.filter(c => status(c) === 'known').length, 0);
+  const known = decks.reduce((n, d) => n + d.cards.filter(c => status(c, d) === 'known').length, 0);
   const list = decks.length ? `<div class="decks">${decks.map(d => {
     const n = dueCount(d);
     return `<article class="deck">
@@ -515,13 +525,13 @@ async function renderDeck() {
   const d = state.decks[state.deckId];
   if (!d) { state.view = 'decks'; return renderDecks(); }
   const f = state.filter;
-  const cards = d.cards.filter(c => !f.size || [...f].some(k => k === 'due' ? isDue(c) : status(c) === k));
+  const cards = d.cards.filter(c => !f.size || [...f].some(k => k === 'due' ? isDue(c, d) : status(c, d) === k));
   const n = dueCount(d);
   const texts = await Promise.all(cards.map(c => bible.loaded ? verseText(c.ref) : null));
   const rows = cards.map((c, i) => `<tr>
     <td class="txt"><span class="ref">${esc(refText(c.ref))}</span></td>
     <td class="txt">${texts[i] ? esc(texts[i]) : '<span class="muted">' + (bible.loaded ? 'passage introuvable' : 'Bible non chargée') + '</span>'}</td>
-    <td>${lvlBars(c)}</td><td class="num">${fmtDue(c)}</td>
+    <td style="white-space:nowrap">${lvlBars(c, d)}</td><td class="num">${fmtDue(c, d)}</td>
     <td class="act"><button class="icon" data-act="editCard" data-id="${c.id}" aria-label="Modifier" data-tip="Changer la référence">${ICON.edit}</button><button class="icon" data-act="delCard" data-id="${c.id}" aria-label="Supprimer">${ICON.trash}</button></td></tr>`).join('');
   app.innerHTML = topbar(`<button class="icon" data-act="tab" data-tab="decks" aria-label="Retour aux paquets">${ICON.back}</button><h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</h1><button class="icon" data-act="renameDeck" aria-label="Renommer" data-tip="Renommer le paquet">${ICON.edit}</button>`) +
   `<main><div class="toolbar"><div class="wrap">
@@ -531,10 +541,11 @@ async function renderDeck() {
       <button class="btn" data-act="import" data-tip="Coller une liste de références">Importer</button>
       <button class="btn" data-act="exportDeck" data-tip="Copier ou partager la liste des références">Exporter</button>
       <label class="row small muted" style="gap:6px">Sens
-        <select class="sel" id="deckDir" data-tip="Ce qui est montré en premier pendant la révision">
-          <option value="ref" ${d.dir !== 'text' && d.dir !== 'mix' ? 'selected' : ''}>Référence → texte</option>
+        <select class="sel" id="deckDir" data-tip="Ce qui est montré en premier pendant la révision. « Les deux » : chaque verset est demandé dans les deux sens, avec une progression pour chacun">
+          <option value="both" ${d.dir === 'both' ? 'selected' : ''}>Les deux sens</option>
+          <option value="ref" ${d.dir !== 'text' && d.dir !== 'mix' && d.dir !== 'both' ? 'selected' : ''}>Référence → texte</option>
           <option value="text" ${d.dir === 'text' ? 'selected' : ''}>Texte → référence</option>
-          <option value="mix" ${d.dir === 'mix' ? 'selected' : ''}>Mélangé</option>
+          <option value="mix" ${d.dir === 'mix' ? 'selected' : ''}>Un sens au hasard</option>
         </select></label>
       <span class="spacer"></span>
       <button class="btn ghost danger sm" data-act="delDeck">Supprimer le paquet</button>
@@ -557,17 +568,19 @@ async function renderStudy() {
   const head = topbar(`<button class="icon" data-act="quitStudy" aria-label="Arrêter la révision">${ICON.back}</button><h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</h1>`);
   if (!s.queue.length) {
     app.innerHTML = head + `<main><div class="study"><div class="done">
-      <div class="big num">${s.done}</div><div>verset${s.done > 1 ? 's' : ''} revu${s.done > 1 ? 's' : ''}${s.again ? `, <span class="num">${s.again}</span> reprise${s.again > 1 ? 's' : ''} en cours de route` : ''}</div>
-      <p class="muted">Prochain verset dû : ${nextDueText(d)}</p>
+      <div class="big num">${s.done}</div><div>carte${s.done > 1 ? 's' : ''} revue${s.done > 1 ? 's' : ''}${s.again ? `, <span class="num">${s.again}</span> reprise${s.again > 1 ? 's' : ''} en cours de route` : ''}</div>
+      <p class="muted">Prochaine révision due : ${nextDueText(d)}</p>
       <div class="row"><button class="btn primary" data-act="tab" data-tab="decks">Retour aux paquets</button><button class="btn" data-act="open" data-id="${d.id}">Voir le paquet</button></div>
     </div></div></main>`;
     return;
   }
-  const c = d.cards.find(x => x.id === s.queue[0]);
+  const item = s.queue[0];
+  const c = d.cards.find(x => x.id === item.id);
   if (!c) { s.queue.shift(); return renderStudy(); }
+  const st = sideState(c, item.side);
   const text = (await verseText(c.ref)) || 'Passage introuvable dans la Bible chargée.';
   const pct = Math.round(100 * s.done / (s.done + s.queue.length));
-  const textFirst = s.side[c.id] === 'text';
+  const textFirst = item.side === 'text';
   const front = textFirst ? text : refText(c.ref), back = textFirst ? refText(c.ref) : text;
   app.innerHTML = head + `<main><div class="study">
     <div class="row" style="justify-content:space-between"><span class="small muted num">${s.done} / ${s.done + s.queue.length}</span><span class="small muted hide-m"><span class="kbd">Espace</span> retourner &nbsp; <span class="kbd">1</span>–<span class="kbd">4</span> noter</span></div>
@@ -578,15 +591,16 @@ async function renderStudy() {
     </button></div>
     ${s.flipped ? `<div class="grades">
       <button class="btn g0" data-act="grade" data-g="0">Encore<small>tout de suite</small></button>
-      <button class="btn g1" data-act="grade" data-g="1">Difficile<small>${INTERVALS[Math.max(1, c.lvl||0)]} j</small></button>
-      <button class="btn g2" data-act="grade" data-g="2">Bien<small>${INTERVALS[Math.min(MAXLVL, (c.lvl||0) + 1)]} j</small></button>
-      <button class="btn g3" data-act="grade" data-g="3">Facile<small>${INTERVALS[Math.min(MAXLVL, (c.lvl||0) + 2)]} j</small></button>
+      <button class="btn g1" data-act="grade" data-g="1">Difficile<small>${INTERVALS[Math.max(1, st.lvl||0)]} j</small></button>
+      <button class="btn g2" data-act="grade" data-g="2">Bien<small>${INTERVALS[Math.min(MAXLVL, (st.lvl||0) + 1)]} j</small></button>
+      <button class="btn g3" data-act="grade" data-g="3">Facile<small>${INTERVALS[Math.min(MAXLVL, (st.lvl||0) + 2)]} j</small></button>
     </div>` : `<div class="grades" style="visibility:hidden"><button class="btn">&nbsp;<small>&nbsp;</small></button></div>`}
   </div></main>`;
 }
 function nextDueText(d) {
-  const future = d.cards.filter(c => !isDue(c)).map(c => c.due);
-  if (!future.length) return d.cards.some(isDue) ? 'maintenant' : 'aucun';
+  const future = [];
+  d.cards.forEach(c => deckSides(d).forEach(s => { const st = sideState(c, s); if (!stDue(st)) future.push(st.due); }));
+  if (!future.length) return d.cards.some(c => isDue(c, d)) ? 'maintenant' : 'aucune';
   const days = Math.ceil((Math.min(...future) - now()) / DAY);
   return days <= 1 ? 'demain' : `dans ${days} jours`;
 }
@@ -648,21 +662,30 @@ function startStudy(id) {
   const d = state.decks[id];
   if (!d || !d.cards.length) return;
   if (!bible.loaded) { toast('Chargez d\'abord votre Bible dans les réglages'); return; }
-  let cards = d.cards.filter(isDue), ahead = false;
-  if (!cards.length) { if (!settings.ahead) { toast('Rien à revoir dans ce paquet'); return; } cards = d.cards.slice(); ahead = true; }
-  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
-  const side = {};
-  cards.forEach(c => { side[c.id] = d.dir === 'text' ? 'text' : d.dir === 'mix' ? (Math.random() < .5 ? 'text' : 'ref') : 'ref'; });
-  state.study = { deckId: id, queue: cards.map(c => c.id), done: 0, again: 0, flipped: false, side };
+  // Une « carte » de révision = un verset dans un sens donné.
+  const build = all => {
+    const items = [];
+    d.cards.forEach(c => {
+      const sides = d.dir === 'mix' ? [Math.random() < .5 ? 'text' : 'ref'] : deckSides(d);
+      sides.forEach(side => { if (all || stDue(sideState(c, side))) items.push({ id: c.id, side }); });
+    });
+    return items;
+  };
+  let items = build(false), ahead = false;
+  if (!items.length) { if (!settings.ahead) { toast('Rien à revoir dans ce paquet'); return; } items = build(true); ahead = true; }
+  for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
+  // Éviter que les deux sens d'un même verset se suivent.
+  for (let i = 1; i < items.length; i++) if (items[i].id === items[i - 1].id) { const j = items.findIndex((x, k) => k > i && x.id !== items[i - 1].id); if (j > 0) [items[i], items[j]] = [items[j], items[i]]; }
+  state.study = { deckId: id, queue: items, done: 0, again: 0, flipped: false };
   go('study');
   if (ahead) toast('Révision en avance : tout le paquet');
 }
 function doGrade(g) {
   const s = state.study; if (!s || !s.flipped) return;
-  const d = state.decks[s.deckId]; const id = s.queue.shift();
-  const c = d.cards.find(x => x.id === id);
-  if (c) { grade(c, g); persistDeck(d); }
-  if (g === 0) { s.queue.push(id); s.again++; } else s.done++;
+  const d = state.decks[s.deckId]; const item = s.queue.shift();
+  const c = d.cards.find(x => x.id === item.id);
+  if (c) { grade(sideState(c, item.side), g); persistDeck(d); }
+  if (g === 0) { s.queue.push(item); s.again++; } else s.done++;
   s.flipped = false;
   render();
 }
@@ -806,7 +829,7 @@ $('#formDeck').addEventListener('submit', e => {
   if (e.submitter?.value !== 'ok') return;
   const name = $('#deckName').value.trim(); if (!name) { e.preventDefault(); return; }
   if (renaming) { const d = state.decks[state.deckId]; if (d) { d.name = name; persistDeck(d); } }
-  else { const d = { id: uid(), name, dir: 'ref', cards: [], created: now(), updated: now() }; persistDeck(d); state.deckId = d.id; state.filter = new Set(); go('deck'); return; }
+  else { const d = { id: uid(), name, dir: 'both', cards: [], created: now(), updated: now() }; persistDeck(d); state.deckId = d.id; state.filter = new Set(); go('deck'); return; }
   render();
 });
 $('#formCard').addEventListener('submit', async e => {
@@ -826,7 +849,7 @@ $('#formCard').addEventListener('submit', async e => {
 $('#formPick').addEventListener('submit', e => {
   if (e.submitter?.value !== 'ok' || !pickRef) return;
   let d; const newName = $('#pickNew').value.trim();
-  if (newName) { d = { id: uid(), name: newName, dir: 'ref', cards: [], created: now(), updated: now() }; }
+  if (newName) { d = { id: uid(), name: newName, dir: 'both', cards: [], created: now(), updated: now() }; }
   else { d = state.decks[$('#pickDeck').value]; if (!d) { e.preventDefault(); toast('Choisissez un paquet ou donnez un nom'); return; } }
   const added = addRefToDeck(d, pickRef);
   persistDeck(d); settings.lastDeck = d.id; saveSettings();
@@ -853,6 +876,10 @@ $('#btnCopyText').addEventListener('click', async () => {
   const meta = await dbGet('meta', 'bible');
   if (meta) { bible.meta = meta; bible.loaded = true; }
   (await dbAll('decks')).forEach(d => { state.decks[d.id] = d; });
+  if (!settings.bothByDefault) { // passage en 1.2.0 : les deux sens deviennent le réglage par défaut
+    Object.values(state.decks).forEach(d => { if (!d.dir || d.dir === 'ref') { d.dir = 'both'; persistDeck(d); } });
+    settings.bothByDefault = true; saveSettings();
+  }
   history.replaceState({ view: 'lookup' }, '');
   render();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
