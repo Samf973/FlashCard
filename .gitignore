@@ -1,0 +1,6 @@
+# Jamais de texte biblique dans le dépôt : chacun charge son propre ePub.
+*.epub
+*.pdf
+.claude/
+Thumbs.db
+desktop.ini

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mémo Versets</title>
+<meta name="description" content="Retrouver un verset par sa référence et mémoriser des versets par répétition espacée, à partir de votre propre Bible au format ePub.">
+<meta name="theme-color" content="#2456A6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --ground:#EDF0F4; --surface:#FFFFFF; --surface-2:#F5F7FA; --ink:#172033; --muted:#5B6577;
+  --line:#D5DBE5; --accent:#2456A6; --accent-ink:#FFFFFF; --accent-soft:#DCE6F7;
+  --good:#2E7D4F; --warn:#B7651A; --bad:#B3372F; --shadow:0 10px 30px rgba(23,32,51,.10);
+  --serif:Georgia,"Noto Serif","Times New Roman",serif;
+  --body:system-ui,"Segoe UI",Roboto,"Noto Sans",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ground:#10151C; --surface:#1A2129; --surface-2:#212933; --ink:#E7ECF3; --muted:#97A2B3;
+    --line:#2C3642; --accent:#8FB4F2; --accent-ink:#0F1A2E; --accent-soft:#24344D;
+    --good:#6CC48F; --warn:#E0A05C; --bad:#E57B72; --shadow:0 10px 30px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.5 var(--body);-webkit-font-smoothing:antialiased;overscroll-behavior-y:none}
+button,input,textarea,select{font:inherit;color:inherit}
+a{color:var(--accent)}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em;font-weight:700}
+h1{font-size:1.35rem}
+h2{font-size:1.2rem}
+h3{font-size:1.02rem}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:.85rem}
+[hidden]{display:none!important}
+
+/* ---------- Structure ---------- */
+#app{height:100dvh;display:flex;flex-direction:column}
+.topbar{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--surface);border-bottom:1px solid var(--line);z-index:5}
+.topbar .brand{font-weight:700;font-size:1.1rem;display:flex;align-items:center;gap:8px}
+.topbar .brand svg{width:22px;height:22px}
+.spacer{flex:1}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+.scroll{flex:1;min-height:0;overflow:auto;padding:18px 16px 32px}
+.wrap{max-width:820px;margin:0 auto;width:100%}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.toolbar{flex:none;padding:12px 16px 10px;background:var(--ground);border-bottom:1px solid var(--line)}
+.toolbar .wrap{display:flex;flex-direction:column;gap:10px}
+.tabs{flex:none;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;border:0;background:none;padding:8px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;color:var(--muted);cursor:pointer}
+.tabs button svg{width:22px;height:22px}
+.tabs button.on{color:var(--accent);font-weight:600}
+
+/* ---------- Boutons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;min-height:42px;line-height:1.2;font-weight:500;text-decoration:none;color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,.chip:focus-visible,.icon:focus-visible,.card-btn:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.ghost:hover{background:var(--surface-2);border-color:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:5px 10px;min-height:34px;font-size:.85rem}
+.icon{width:38px;height:38px;border-radius:8px;border:1px solid transparent;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);text-decoration:none;flex:none}
+.icon:hover{background:var(--surface-2);color:var(--ink)}
+.icon svg{width:19px;height:19px}
+select.sel{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:38px}
+input.field{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);width:100%;min-height:46px;font-size:1.05rem}
+
+/* ---------- Recherche de versets ---------- */
+.lookup{display:flex;flex-direction:column;gap:12px}
+.verse-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+.verse-box .refline{font-weight:700;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.verse-text{font-family:var(--serif);font-size:1.18rem;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.verse-text sup{font-size:.68em;color:var(--muted);font-family:var(--body);font-weight:700;margin-right:2px}
+.verse-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.examples{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:.85rem;color:var(--muted)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip:hover:not(.on){border-color:var(--accent);color:var(--ink)}
+.hint{font-size:.78rem;color:var(--muted)}
+.setup{border:1px dashed var(--line);border-radius:14px;padding:26px 20px;text-align:center;color:var(--muted);background:var(--surface)}
+.setup h2{color:var(--ink);margin-bottom:6px}
+.setup p{max-width:48ch;margin:8px auto}
+.progress{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .2s}
+@media (prefers-reduced-motion: reduce){.progress i{transition:none}}
+
+/* ---------- Paquets ---------- */
+.stats{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 18px;color:var(--muted)}
+.stats b{color:var(--ink);font-size:1.6rem;font-weight:700;display:block;line-height:1.1}
+.decks{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.deck{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.deck .deck-title{font-weight:700;font-size:1.12rem;cursor:pointer;background:none;border:0;text-align:left;padding:0;color:var(--ink);line-height:1.25}
+.deck .deck-title:hover{color:var(--accent)}
+.deck .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:.85rem}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);font-size:.8rem;color:var(--muted)}
+.pill.due{background:var(--accent-soft);color:var(--accent);border-color:transparent;font-weight:600}
+.deck .actions{display:flex;gap:8px;margin-top:auto}
+.deck .actions .btn{flex:1}
+.empty{border:1px dashed var(--line);border-radius:12px;padding:32px 20px;text-align:center;color:var(--muted)}
+.empty h2{margin-bottom:6px;color:var(--ink)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.tablewrap{flex:1;min-height:0;overflow:auto;background:var(--surface)}
+.tablewrap table{border-collapse:collapse;width:100%;min-width:600px;max-width:820px;margin:0 auto}
+.tablewrap th{position:sticky;top:0;background:var(--surface);text-align:left;font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:10px 12px;box-shadow:inset 0 -1px 0 var(--line);z-index:2;font-weight:600}
+.tablewrap td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.tablewrap td.txt{white-space:pre-wrap;max-width:360px;font-size:.92rem}
+.tablewrap tr:hover td{background:var(--surface-2)}
+.tablewrap td.act{white-space:nowrap;text-align:right}
+.ref{font-weight:600;white-space:nowrap}
+.lvl{display:inline-flex;gap:2px;align-items:flex-end;height:14px}
+.lvl i{width:5px;background:var(--line);border-radius:1px;display:block}
+.lvl i.f{background:var(--accent)}
+.due-late{color:var(--bad);font-weight:600}
+.due-today{color:var(--accent);font-weight:600}
+.count-line{font-size:.85rem;color:var(--muted)}
+
+/* ---------- Révision ---------- */
+.study{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px;gap:12px;max-width:720px;margin:0 auto;width:100%}
+.scene{flex:1;min-height:240px;perspective:1400px;display:flex}
+.card-btn{flex:1;position:relative;border:0;background:transparent;padding:0;cursor:pointer;transform-style:preserve-3d;transition:transform .45s cubic-bezier(.2,.7,.2,1);text-align:center}
+.card-btn.flipped{transform:rotateY(180deg)}
+@media (prefers-reduced-motion: reduce){.card-btn{transition:none}}
+.face{position:absolute;inset:0;backface-visibility:hidden;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 22px 30px;gap:10px;overflow:auto}
+.face .label{position:absolute;top:12px;left:16px;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.face .text{font-size:clamp(1.4rem,3.4vw,2rem);font-weight:700;line-height:1.25;white-space:pre-wrap;word-break:break-word;max-width:100%}
+.face .text.long{font-size:clamp(1.05rem,2.4vw,1.3rem);font-family:var(--serif);font-weight:400;text-align:left;line-height:1.5}
+.face.back{transform:rotateY(180deg);background:var(--surface-2)}
+.face .tap{position:absolute;bottom:12px;font-size:.78rem;color:var(--muted)}
+.grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grades .btn{flex-direction:column;gap:2px;padding:10px 4px;min-height:60px}
+.grades .btn small{font-weight:400;color:var(--muted);font-size:.72rem}
+.grades .btn.g0{border-color:var(--bad);color:var(--bad)}
+.grades .btn.g1{border-color:var(--warn);color:var(--warn)}
+.grades .btn.g2{border-color:var(--accent);color:var(--accent)}
+.grades .btn.g3{border-color:var(--good);color:var(--good)}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:.72rem;color:var(--muted);background:var(--surface)}
+.done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px}
+.done .big{font-size:2.6rem;font-weight:700;line-height:1}
+
+/* ---------- Réglages ---------- */
+.section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.section h3{margin-bottom:2px}
+.check{display:flex;align-items:center;gap:10px;cursor:pointer}
+.check input{width:20px;height:20px}
+
+/* ---------- Dialogues ---------- */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:0;width:min(520px,calc(100vw - 32px));box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(10,14,20,.45)}
+dialog form{display:flex;flex-direction:column;gap:12px;padding:20px}
+dialog label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted)}
+dialog input[type=text],dialog input[type=number],dialog textarea,dialog select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--ground);color:var(--ink);width:100%;min-height:42px}
+dialog textarea{min-height:80px;resize:vertical}
+dialog .dlg-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+dialog .check{color:var(--ink);font-size:1rem}
+.vrow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px}
+@media (max-width:480px){.vrow{grid-template-columns:1fr 1fr}.vrow label:first-child{grid-column:1/-1}}
+.preview{font-family:var(--serif);font-size:.98rem;white-space:pre-wrap;background:var(--ground);border-radius:8px;padding:10px 12px;max-height:180px;overflow:auto;color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:9px 16px;border-radius:8px;font-size:.9rem;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100vw - 32px)}
+.toast.show{opacity:1}
+
+@media (max-width:560px){
+  .topbar{padding-left:12px;padding-right:12px}
+  .scroll{padding:14px 12px 28px}
+  .toolbar{padding:10px 12px 8px}
+  .study{padding:10px 12px 12px}
+  .grades .btn small{display:none}
+  .hide-m{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<dialog id="dlgDeck">
+  <form method="dialog" id="formDeck">
+    <h2 id="dlgDeckTitle">Nouveau paquet</h2>
+    <label>Nom du paquet<input type="text" id="deckName" required maxlength="80" autocomplete="off"></label>
+    <div class="dlg-actions"><button class="btn" type="button" data-close>Annuler</button><button class="btn primary" value="ok">Enregistrer</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgCard">
+  <form method="dialog" id="formCard">
+    <h2 id="dlgCardTitle">Nouveau verset</h2>
+    <div class="vrow">
+      <label>Livre<select id="vBook"></select></label>
+      <label>Chapitre<input type="number" id="vCh" min="1" max="150" inputmode="numeric"></label>
+      <label>Verset<input type="number" id="vV1" min="1" max="176" inputmode="numeric"></label>
+      <label>à (facultatif)<input type="number" id="vV2" min="1" max="176" inputmode="numeric"></label>
+    </div>
+    <div class="preview" id="vPreview">Indiquez livre, chapitre et verset.</div>
+    <label class="check" id="addAnotherRow"><input type="checkbox" id="addAnother" checked>Enchaîner avec un autre verset</label>
+    <div class="dlg-actions"><button class="btn" type="button" data-close>Annuler</button><button class="btn primary" value="ok">Enregistrer</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPick">
+  <form method="dialog" id="formPick">
+    <h2>Ajouter à un paquet</h2>
+    <p class="small muted" style="margin:0" id="pickRef"></p>
+    <label>Paquet<select id="pickDeck"></select></label>
+    <label>Ou nouveau paquet<input type="text" id="pickNew" placeholder="Nom du nouveau paquet" autocomplete="off"></label>
+    <div class="dlg-actions"><button class="btn" type="button" data-close>Annuler</button><button class="btn primary" value="ok">Ajouter</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgImport">
+  <form method="dialog" id="formImport">
+    <h2>Importer des références</h2>
+    <p class="small muted" style="margin:0">Une référence par ligne : « Jean 3:16 », « Ps 83:18 », « Matthieu 5:3-5 ». Les abréviations courantes sont reconnues ; tout ce qui suit la référence sur la ligne est ignoré.</p>
+    <label>Références<textarea id="importText" rows="8" placeholder="Jean 3:16&#10;Psaumes 83:18&#10;Révélation 21:3-4"></textarea></label>
+    <div class="dlg-actions"><button class="btn" type="button" data-close>Annuler</button><button class="btn primary" value="ok">Importer</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlgText">
+  <form method="dialog">
+    <h2 id="dlgTextTitle">Texte</h2>
+    <label>Contenu<textarea id="textArea" rows="10" readonly></textarea></label>
+    <div class="dlg-actions"><button class="btn" type="button" id="btnCopyText">Copier</button><button class="btn primary" value="ok">Fermer</button></div>
+  </form>
+</dialog>
+
+<input type="file" id="fileEpub" accept=".epub,application/epub+zip" hidden>
+<input type="file" id="fileDecks" accept=".json,application/json" hidden>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+const APP_VERSION = '1.0.0';
+const INTERVALS = [0, 1, 2, 4, 8, 16, 32, 64]; // jours d'attente par niveau
+const MAXLVL = INTERVALS.length - 1;
+const KNOWN = 5;
+const DAY = 864e5;
+const $ = (s, r = document) => r.querySelector(s);
+const app = $('#app');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const now = () => Date.now();
+
+/* ---------- Livres de la Bible (noms de la Traduction du monde nouveau) ---------- */
+const BOOKS = ['Genèse','Exode','Lévitique','Nombres','Deutéronome','Josué','Juges','Ruth','1 Samuel','2 Samuel','1 Rois','2 Rois','1 Chroniques','2 Chroniques','Esdras','Néhémie','Esther','Job','Psaumes','Proverbes','Ecclésiaste','Chant de Salomon','Isaïe','Jérémie','Lamentations','Ézéchiel','Daniel','Osée','Joël','Amos','Abdias','Jonas','Michée','Nahum','Habacuc','Sophonie','Aggée','Zacharie','Malachie','Matthieu','Marc','Luc','Jean','Actes','Romains','1 Corinthiens','2 Corinthiens','Galates','Éphésiens','Philippiens','Colossiens','1 Thessaloniciens','2 Thessaloniciens','1 Timothée','2 Timothée','Tite','Philémon','Hébreux','Jacques','1 Pierre','2 Pierre','1 Jean','2 Jean','3 Jean','Jude','Révélation'];
+const ALIASES = {gn:1,ge:1,gen:1,ex:2,exo:2,lv:3,le:3,lev:3,nb:4,no:4,nom:4,nomb:4,dt:5,de:5,deut:5,jos:6,jg:7,jug:7,rt:8,ru:8,'1s':9,'1sa':9,'1sam':9,'2s':10,'2sa':10,'2sam':10,'1r':11,'1ro':11,'2r':12,'2ro':12,'1ch':13,'1chr':13,'1chron':13,'2ch':14,'2chr':14,'2chron':14,esd:15,ne:16,neh:16,est:17,jb:18,ps:19,psa:19,psaume:19,pr:20,pro:20,prov:20,ec:21,ecc:21,eccl:21,ct:22,chant:22,chantdes:22,cantique:22,cantiquedescantiques:22,is:23,es:23,esaie:23,jr:24,jer:24,lm:25,lam:25,ez:26,eze:26,ezech:26,dn:27,dan:27,os:28,jl:29,am:30,ab:31,abd:31,jon:32,mi:33,mic:33,na:34,nah:34,hab:35,sph:36,sop:36,ag:37,agg:37,za:38,zac:38,zach:38,ml:39,mal:39,mt:40,mat:40,matt:40,mc:41,mr:41,lc:42,lu:42,jn:43,ac:44,act:44,rm:45,ro:45,rom:45,'1co':46,'1cor':46,'2co':47,'2cor':47,ga:48,gal:48,ep:49,eph:49,php:50,phil:50,col:51,'1th':52,'1thess':52,'2th':53,'2thess':53,'1tm':54,'1ti':54,'1tim':54,'2tm':55,'2ti':55,'2tim':55,tt:56,tit:56,phm:57,philem:57,he:58,heb:58,jc:59,jac:59,'1p':60,'1pi':60,'1pierre':60,'2p':61,'2pi':61,'1jn':62,'2jn':63,'3jn':64,jud:65,re:66,rev:66,apocalypse:66,apoc:66,ap:66};
+const normBook = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+const BOOK_INDEX = {};
+BOOKS.forEach((b, i) => { BOOK_INDEX[normBook(b)] = i + 1; });
+Object.entries(ALIASES).forEach(([k, v]) => { BOOK_INDEX[normBook(k)] = v; });
+const REF_RE = /^([1-3]?\s?[A-Za-zÀ-ÿ'’.\s-]+?)\s*\.?\s*(\d{1,3})\s*[:.,]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/;
+function parseRef(str) {
+  const m = String(str).trim().match(REF_RE); if (!m) return null;
+  const bk = BOOK_INDEX[normBook(m[1])]; if (!bk) return null;
+  const r = { bk, ch: +m[2], v1: +m[3], v2: m[4] ? +m[4] : null };
+  if (r.v2 !== null && r.v2 <= r.v1) r.v2 = null;
+  return { ref: r, rest: str.trim().slice(m[0].length) };
+}
+const refText = r => `${BOOKS[r.bk - 1]} ${r.ch}:${r.v1}${r.v2 ? '-' + r.v2 : ''}`;
+function refLink(r) {
+  const p = (n, w) => String(n).padStart(w, '0');
+  const a = p(r.bk, 2) + p(r.ch, 3) + p(r.v1, 3);
+  const b = r.v2 ? '-' + p(r.bk, 2) + p(r.ch, 3) + p(r.v2, 3) : '';
+  return `https://www.jw.org/finder?wtlocale=F&prefer=lang&pub=nwtsty&bible=${a}${b}`;
+}
+
+/* ---------- IndexedDB ---------- */
+let idb = null;
+function openDB() {
+  return new Promise((res, rej) => {
+    const q = indexedDB.open('memo-versets', 1);
+    q.onupgradeneeded = () => { const d = q.result; d.createObjectStore('chapters'); d.createObjectStore('meta'); d.createObjectStore('decks', { keyPath: 'id' }); };
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  });
+}
+const tx = (store, mode, fn) => new Promise((res, rej) => { const t = idb.transaction(store, mode); const r = fn(t.objectStore(store)); t.oncomplete = () => res(r && r.result !== undefined ? r.result : undefined); t.onerror = () => rej(t.error); });
+const dbGet = (store, key) => new Promise((res, rej) => { const r = idb.transaction(store).objectStore(store).get(key); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const dbAll = store => new Promise((res, rej) => { const r = idb.transaction(store).objectStore(store).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const dbPut = (store, val, key) => tx(store, 'readwrite', s => key === undefined ? s.put(val) : s.put(val, key));
+const dbDel = (store, key) => tx(store, 'readwrite', s => s.delete(key));
+const dbClear = store => tx(store, 'readwrite', s => s.clear());
+
+/* ---------- Bible : lecture de l'ePub ---------- */
+const bible = { loaded: false, meta: null, cache: new Map() };
+async function readZip(buf) {
+  const dv = new DataView(buf); const td = new TextDecoder();
+  let i = buf.byteLength - 22;
+  while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
+  if (i < 0) throw new Error('Ce fichier n\'est pas une archive ePub valide.');
+  const n = dv.getUint16(i + 10, true); let p = dv.getUint32(i + 16, true);
+  const entries = {};
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    entries[td.decode(new Uint8Array(buf, p + 46, nlen))] = { method, csize, lho };
+    p += 46 + nlen + elen + clen;
+  }
+  return {
+    has: name => !!entries[name],
+    async text(name) {
+      const e = entries[name]; if (!e) throw new Error('Fichier absent de l\'ePub : ' + name);
+      const q = e.lho, nl = dv.getUint16(q + 26, true), el = dv.getUint16(q + 28, true);
+      const data = new Uint8Array(buf, q + 30 + nl + el, e.csize);
+      if (e.method === 0) return td.decode(data);
+      if (e.method !== 8) throw new Error('Compression non prise en charge.');
+      const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return await new Response(stream).text();
+    }
+  };
+}
+function extractChapter(xhtml) {
+  const doc = new DOMParser().parseFromString(xhtml, 'text/html');
+  doc.querySelectorAll('aside, .pageNum, a[epub\\:type="noteref"], .w_navigation, header').forEach(el => el.remove());
+  const verses = {}; let cur = null, skipNum = false;
+  const walk = node => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { if (cur !== null && !skipNum) verses[cur] += child.nodeValue; continue; }
+      if (child.nodeType !== 1) continue;
+      const id = child.id || '';
+      const m = id.match(/^chapter\d+_verse(\d+)$/);
+      if (m) { cur = +m[1]; verses[cur] = ''; skipNum = true; continue; }
+      // Après le repère de verset vient le numéro : <strong><sup>n</sup></strong>, ou le numéro de chapitre (span.w_ch) pour le verset 1.
+      if (skipNum && (child.tagName === 'STRONG' || child.classList.contains('w_ch'))) { skipNum = false; continue; }
+      walk(child);
+      if (cur !== null && /^(P|DIV|LI|BR|H[1-6])$/.test(child.tagName)) verses[cur] += '\n';
+    }
+  };
+  walk(doc.body);
+  const out = {};
+  for (const [v, t] of Object.entries(verses)) out[v] = t.replace(/[\u200b\u00ad]/g, '').replace(/[ \t\u00a0\u202f]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{2,}/g, '\n').trim();
+  return out;
+}
+async function loadEpub(buf, onProgress) {
+  const zip = await readZip(buf);
+  if (!zip.has('OEBPS/biblebooknav.xhtml')) throw new Error('Cet ePub ne ressemble pas à la Traduction du monde nouveau publiée sur jw.org (page de navigation des livres absente).');
+  const nav = await zip.text('OEBPS/biblebooknav.xhtml');
+  const bookLinks = [...nav.matchAll(/<a href="([^"]+\.xhtml)">([^<]+)<\/a>/g)].map(m => m[1]);
+  if (bookLinks.length !== 66) throw new Error(`66 livres attendus, ${bookLinks.length} trouvés.`);
+  const chapterFiles = [];
+  for (let bk = 1; bk <= 66; bk++) {
+    const href = bookLinks[bk - 1];
+    if (/biblechapternav/.test(href)) {
+      const cn = await zip.text('OEBPS/' + href);
+      for (const m of cn.matchAll(/<a href="([^"]+\.xhtml)">(\d+)<\/a>/g)) chapterFiles.push({ bk, ch: +m[2], href: m[1] });
+    } else chapterFiles.push({ bk, ch: 1, href });
+  }
+  const t = idb.transaction('chapters', 'readwrite'); t.objectStore('chapters').clear();
+  await new Promise((res, rej) => { t.oncomplete = res; t.onerror = () => rej(t.error); });
+  let verses = 0, done = 0; const perBook = {};
+  const BATCH = 40;
+  for (let i = 0; i < chapterFiles.length; i += BATCH) {
+    const slice = chapterFiles.slice(i, i + BATCH);
+    const parsed = [];
+    for (const cf of slice) {
+      const v = extractChapter(await zip.text('OEBPS/' + cf.href));
+      const nums = Object.keys(v).map(Number).sort((a, b) => a - b);
+      if (!nums.length) throw new Error(`Aucun verset trouvé dans ${BOOKS[cf.bk - 1]} ${cf.ch}.`);
+      const arr = []; nums.forEach(n => { arr[n] = v[n]; });
+      parsed.push({ key: cf.bk + '_' + cf.ch, arr });
+      verses += nums.length; perBook[cf.bk] = (perBook[cf.bk] || 0) + 1;
+    }
+    await new Promise((res, rej) => { const w = idb.transaction('chapters', 'readwrite'); const s = w.objectStore('chapters'); parsed.forEach(p => s.put(p.arr, p.key)); w.oncomplete = res; w.onerror = () => rej(w.error); });
+    done += slice.length; onProgress && onProgress(done / chapterFiles.length, verses);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  const meta = { loadedAt: now(), chapters: chapterFiles.length, verses, chaptersPerBook: perBook, title: 'Traduction du monde nouveau (nwt-F)' };
+  await dbPut('meta', meta, 'bible');
+  bible.cache.clear(); bible.meta = meta; bible.loaded = true;
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  return meta;
+}
+async function getChapter(bk, ch) {
+  const key = bk + '_' + ch;
+  if (bible.cache.has(key)) return bible.cache.get(key);
+  const arr = await dbGet('chapters', key);
+  bible.cache.set(key, arr || null);
+  return arr || null;
+}
+async function verseText(r, withNumbers = true) {
+  const arr = await getChapter(r.bk, r.ch);
+  if (!arr) return null;
+  const parts = [];
+  for (let v = r.v1; v <= (r.v2 || r.v1); v++) if (arr[v] !== undefined) parts.push({ v, t: arr[v] });
+  if (!parts.length) return null;
+  if (!withNumbers || parts.length === 1) return parts.map(p => p.t).join('\n');
+  return parts.map(p => `${p.v} ${p.t}`).join('\n');
+}
+async function verseHtml(r) {
+  const arr = await getChapter(r.bk, r.ch);
+  if (!arr) return null;
+  const parts = [];
+  for (let v = r.v1; v <= (r.v2 || r.v1); v++) if (arr[v] !== undefined) parts.push(`${r.v2 ? `<sup>${v}</sup>` : ''}${esc(arr[v])}`);
+  return parts.length ? parts.join('\n') : null;
+}
+function chapterCount(bk) { return bible.meta?.chaptersPerBook?.[bk] || 150; }
+
+/* ---------- État, réglages ---------- */
+const state = { decks: {}, view: 'lookup', deckId: null, filter: new Set(), study: null, lookup: '', found: null };
+let settings = { tips: true, ahead: true, lastBook: 43 };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('memo-versets.settings') || '{}')); } catch (e) {}
+const saveSettings = () => { try { localStorage.setItem('memo-versets.settings', JSON.stringify(settings)); } catch (e) {} };
+function persistDeck(d) { d.updated = now(); state.decks[d.id] = d; dbPut('decks', d).catch(e => toast('Enregistrement impossible : ' + e.message)); }
+function removeDeck(id) { delete state.decks[id]; dbDel('decks', id).catch(() => {}); }
+
+/* ---------- Modèle de révision ---------- */
+const isDue = c => (c.due || 0) <= now();
+const status = c => !c.n ? 'new' : c.lvl >= KNOWN ? 'known' : 'learning';
+const dueCount = d => d.cards.filter(isDue).length;
+function fmtDue(c) {
+  if (!c.n) return '<span class="muted">nouveau</span>';
+  const days = Math.ceil((c.due - now()) / DAY);
+  if (c.due <= now()) { const late = Math.floor((now() - c.due) / DAY); return late >= 1 ? `<span class="due-late">en retard (${late} j)</span>` : '<span class="due-today">aujourd\'hui</span>'; }
+  if (days <= 1) return 'demain';
+  if (days < 30) return `dans ${days} j`;
+  return `dans ${Math.round(days / 30)} mois`;
+}
+const lvlBars = c => '<span class="lvl" aria-label="niveau ' + (c.lvl||0) + '">' + Array.from({length: MAXLVL}, (_, i) => `<i class="${i < (c.lvl||0) ? 'f' : ''}" style="height:${5 + i * 1.3}px"></i>`).join('') + '</span>';
+function grade(card, g) {
+  card.n = (card.n || 0) + 1;
+  let lvl = card.lvl || 0;
+  if (g === 0) lvl = 0; else if (g === 1) lvl = Math.max(1, lvl); else if (g === 2) lvl = Math.min(MAXLVL, lvl + 1); else lvl = Math.min(MAXLVL, lvl + 2);
+  card.lvl = lvl;
+  card.due = g === 0 ? now() : now() + Math.max(1, INTERVALS[lvl]) * DAY;
+}
+
+/* ---------- Rendu ---------- */
+const ICON = {
+  logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21h15M9 7h6M9 11h4"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+  cards: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="14" height="12" rx="2"/><path d="M7 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-1"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+  ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>'
+};
+const TABS = [['lookup', 'Versets', ICON.search], ['decks', 'Paquets', ICON.cards], ['settings', 'Réglages', ICON.gear]];
+function tabs(active) {
+  return `<nav class="tabs">${TABS.map(([k, l, ic]) => `<button class="${active === k ? 'on' : ''}" data-act="tab" data-tab="${k}" aria-label="${l}">${ic}<span>${l}</span></button>`).join('')}</nav>`;
+}
+function topbar(left, right = '') {
+  return `<header class="topbar">${left || `<div class="brand">${ICON.logo}<span>Mémo Versets</span></div>`}<div class="spacer"></div>${right}</header>`;
+}
+function setupBlock() {
+  if (loading) return `<div class="setup"><h2>Lecture de la Bible…</h2><p class="num">${loading.pct}% · ${loading.verses.toLocaleString('fr-FR')} versets lus</p><div class="progress"><i style="width:${loading.pct}%"></i></div><p class="small">Cela ne se fait qu'une fois. Gardez la page ouverte.</p></div>`;
+  return `<div class="setup"><h2>Chargez votre Bible</h2><p>Choisissez le fichier ePub de la Traduction du monde nouveau téléchargé sur jw.org (en général <b>nwt_F.epub</b>). Il est lu sur cet appareil et reste dans la mémoire de l'application ; rien n'est envoyé nulle part.</p><button class="btn primary" data-act="loadEpub">Choisir le fichier ePub</button><p class="small" style="margin-top:14px">Sur jw.org : Publications, puis Bible, Traduction du monde nouveau, format EPUB.</p></div>`;
+}
+
+function renderLookup() {
+  const f = state.found;
+  let body;
+  if (!bible.loaded) body = setupBlock();
+  else {
+    let result = '';
+    if (state.lookup.trim()) {
+      if (!f) result = `<p class="muted">Référence non reconnue. Écrivez par exemple « Jean 3:16 », « Ps 23:1-3 » ou « 1 Jn 4:8 ».</p>`;
+      else if (f.html === null) result = `<p class="muted">${esc(refText(f.ref))} : ce passage n'existe pas dans ce livre (chapitre ou verset hors limites).</p>`;
+      else result = `<div class="verse-box"><div class="refline">${esc(refText(f.ref))} <span class="pill">TMN</span></div><div class="verse-text">${f.html}</div>
+        <div class="verse-actions"><button class="btn primary" data-act="addToDeck" data-tip="Ajouter ce passage à un paquet de révision">Ajouter à un paquet</button><button class="btn" data-act="copyVerse">Copier</button><a class="btn" href="${refLink(f.ref)}" target="_blank" rel="noopener" data-tip="Ouvrir le passage sur jw.org ou dans JW Library">Ouvrir sur jw.org</a></div></div>`;
+    }
+    body = `<div class="lookup">
+      <input class="field" id="lookupInput" type="search" placeholder="Référence, ex. Jean 3:16 ou Ps 23:1-3" value="${esc(state.lookup)}" autocomplete="off" autocapitalize="words" enterkeyhint="search">
+      <div class="examples">${['Jean 3:16', 'Psaumes 83:18', 'Matthieu 6:9-13', 'Isaïe 41:10', 'Révélation 21:4'].map(r => `<button class="chip" data-act="example" data-ref="${r}">${r}</button>`).join('')}</div>
+      ${result}
+    </div>`;
+  }
+  app.innerHTML = topbar() + `<main><div class="scroll"><div class="wrap">${body}</div></div></main>` + tabs('lookup');
+  const inp = $('#lookupInput');
+  if (inp) {
+    inp.addEventListener('input', () => { state.lookup = inp.value; lookupDebounced(); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+  }
+}
+let lookupTimer;
+function lookupDebounced() { clearTimeout(lookupTimer); lookupTimer = setTimeout(doLookup, 220); }
+async function doLookup() {
+  const p = parseRef(state.lookup);
+  if (!p) { state.found = null; }
+  else state.found = { ref: p.ref, html: await verseHtml(p.ref) };
+  if (state.view !== 'lookup') return;
+  const inp = $('#lookupInput'); const pos = inp ? inp.selectionStart : null; const focused = inp && document.activeElement === inp;
+  renderLookup();
+  if (focused) { const n = $('#lookupInput'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} }
+}
+
+function renderDecks() {
+  const decks = Object.values(state.decks).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  const total = decks.reduce((n, d) => n + d.cards.length, 0);
+  const due = decks.reduce((n, d) => n + dueCount(d), 0);
+  const known = decks.reduce((n, d) => n + d.cards.filter(c => status(c) === 'known').length, 0);
+  const list = decks.length ? `<div class="decks">${decks.map(d => {
+    const n = dueCount(d);
+    return `<article class="deck">
+      <button class="deck-title" data-act="open" data-id="${d.id}">${esc(d.name)}</button>
+      <div class="meta"><span class="num">${d.cards.length} verset${d.cards.length > 1 ? 's' : ''}</span>${n ? `<span class="pill due num">${n} à revoir</span>` : `<span class="pill">à jour</span>`}</div>
+      <div class="actions"><button class="btn primary" data-act="study" data-id="${d.id}" ${!n && !settings.ahead || !d.cards.length ? 'disabled' : ''} data-tip="${n ? 'Réviser les versets dus' : 'Rien n\'est dû : révision en avance de tout le paquet'}">Réviser${n ? ` <span class="num">(${n})</span>` : ''}</button><button class="btn" data-act="open" data-id="${d.id}">Ouvrir</button></div></article>`;
+  }).join('')}</div>` :
+  `<div class="empty"><h2>Aucun paquet pour l'instant</h2><p>Créez un paquet et ajoutez-y des versets par leur référence. Les versets bien connus reviennent de moins en moins souvent.</p><button class="btn primary" data-act="newDeck">Créer un paquet</button></div>`;
+  app.innerHTML = topbar('<h1>Mes paquets</h1>', `<button class="btn primary sm" data-act="newDeck">Nouveau</button>`) + `<main><div class="scroll"><div class="wrap">
+    ${decks.length ? `<div class="stats"><div><b class="num">${due}</b>à revoir aujourd'hui</div><div><b class="num">${known}</b>acquis</div><div><b class="num">${total}</b>verset${total > 1 ? 's' : ''} en tout</div></div>` : ''}
+    ${list}</div></div></main>` + tabs('decks');
+}
+
+const FILTERS = [['due', 'À revoir'], ['new', 'Nouveaux'], ['learning', 'En cours'], ['known', 'Acquis']];
+async function renderDeck() {
+  const d = state.decks[state.deckId];
+  if (!d) { state.view = 'decks'; return renderDecks(); }
+  const f = state.filter;
+  const cards = d.cards.filter(c => !f.size || [...f].some(k => k === 'due' ? isDue(c) : status(c) === k));
+  const n = dueCount(d);
+  const texts = await Promise.all(cards.map(c => bible.loaded ? verseText(c.ref) : null));
+  const rows = cards.map((c, i) => `<tr>
+    <td class="txt"><span class="ref">${esc(refText(c.ref))}</span></td>
+    <td class="txt">${texts[i] ? esc(texts[i]) : '<span class="muted">' + (bible.loaded ? 'passage introuvable' : 'Bible non chargée') + '</span>'}</td>
+    <td>${lvlBars(c)}</td><td class="num">${fmtDue(c)}</td>
+    <td class="act"><button class="icon" data-act="editCard" data-id="${c.id}" aria-label="Modifier" data-tip="Changer la référence">${ICON.edit}</button><button class="icon" data-act="delCard" data-id="${c.id}" aria-label="Supprimer">${ICON.trash}</button></td></tr>`).join('');
+  app.innerHTML = topbar(`<button class="icon" data-act="tab" data-tab="decks" aria-label="Retour aux paquets">${ICON.back}</button><h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</h1><button class="icon" data-act="renameDeck" aria-label="Renommer" data-tip="Renommer le paquet">${ICON.edit}</button>`) +
+  `<main><div class="toolbar"><div class="wrap">
+    <div class="row">
+      <button class="btn primary" data-act="study" data-id="${d.id}" ${!n && !settings.ahead || !d.cards.length ? 'disabled' : ''}>Réviser${n ? ` <span class="num">(${n})</span>` : ''}</button>
+      <button class="btn" data-act="newCard">Ajouter un verset</button>
+      <button class="btn" data-act="import" data-tip="Coller une liste de références">Importer</button>
+      <button class="btn" data-act="exportDeck" data-tip="Copier ou partager la liste des références">Exporter</button>
+      <label class="row small muted" style="gap:6px">Sens
+        <select class="sel" id="deckDir" data-tip="Ce qui est montré en premier pendant la révision">
+          <option value="ref" ${d.dir !== 'text' && d.dir !== 'mix' ? 'selected' : ''}>Référence → texte</option>
+          <option value="text" ${d.dir === 'text' ? 'selected' : ''}>Texte → référence</option>
+          <option value="mix" ${d.dir === 'mix' ? 'selected' : ''}>Mélangé</option>
+        </select></label>
+      <span class="spacer"></span>
+      <button class="btn ghost danger sm" data-act="delDeck">Supprimer le paquet</button>
+    </div>
+    <div class="row" style="gap:12px">
+      <div class="chips">${FILTERS.map(([k, l]) => `<button class="chip ${f.has(k) ? 'on' : ''}" data-act="filter" data-key="${k}">${l}</button>`).join('')}</div>
+      <span class="hint">Un clic isole une catégorie, un autre clic en ajoute une, recliquer la retire ; sans étiquette active, tout s'affiche.</span>
+    </div>
+    <div class="count-line num">${cards.length} verset${cards.length > 1 ? 's' : ''}${f.size ? ` affiché${cards.length > 1 ? 's' : ''} sur ${d.cards.length}` : ''}</div>
+  </div></div>
+  <div class="tablewrap">${d.cards.length ? `<table><thead><tr><th>Référence</th><th>Texte</th><th>Niveau</th><th>Prochaine révision</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="5" class="muted">Aucun verset dans cette sélection.</td></tr>`}</tbody></table>` :
+    `<div class="wrap" style="padding:24px 16px"><div class="empty"><h2>Paquet vide</h2><p>Ajoutez des versets par leur référence, un par un ou en collant une liste.</p><div class="row" style="justify-content:center"><button class="btn primary" data-act="newCard">Ajouter un verset</button><button class="btn" data-act="import">Importer</button></div></div></div>`}</div></main>`;
+  $('#deckDir').addEventListener('change', e => { d.dir = e.target.value; persistDeck(d); });
+  applyTips();
+}
+
+async function renderStudy() {
+  const s = state.study, d = state.decks[s.deckId];
+  if (!d) { state.view = 'decks'; return renderDecks(); }
+  const head = topbar(`<button class="icon" data-act="quitStudy" aria-label="Arrêter la révision">${ICON.back}</button><h1 style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</h1>`);
+  if (!s.queue.length) {
+    app.innerHTML = head + `<main><div class="study"><div class="done">
+      <div class="big num">${s.done}</div><div>verset${s.done > 1 ? 's' : ''} revu${s.done > 1 ? 's' : ''}${s.again ? `, <span class="num">${s.again}</span> reprise${s.again > 1 ? 's' : ''} en cours de route` : ''}</div>
+      <p class="muted">Prochain verset dû : ${nextDueText(d)}</p>
+      <div class="row"><button class="btn primary" data-act="tab" data-tab="decks">Retour aux paquets</button><button class="btn" data-act="open" data-id="${d.id}">Voir le paquet</button></div>
+    </div></div></main>`;
+    return;
+  }
+  const c = d.cards.find(x => x.id === s.queue[0]);
+  if (!c) { s.queue.shift(); return renderStudy(); }
+  const text = (await verseText(c.ref)) || 'Passage introuvable dans la Bible chargée.';
+  const pct = Math.round(100 * s.done / (s.done + s.queue.length));
+  const textFirst = s.side[c.id] === 'text';
+  const front = textFirst ? text : refText(c.ref), back = textFirst ? refText(c.ref) : text;
+  app.innerHTML = head + `<main><div class="study">
+    <div class="row" style="justify-content:space-between"><span class="small muted num">${s.done} / ${s.done + s.queue.length}</span><span class="small muted hide-m"><span class="kbd">Espace</span> retourner &nbsp; <span class="kbd">1</span>–<span class="kbd">4</span> noter</span></div>
+    <div class="progress"><i style="width:${pct}%"></i></div>
+    <div class="scene"><button class="card-btn ${s.flipped ? 'flipped' : ''}" data-act="flip" aria-label="Retourner la carte">
+      <div class="face front"><span class="label">${textFirst ? 'Texte' : 'Référence'}</span><div class="text ${textFirst ? 'long' : ''}">${esc(front)}</div><span class="tap">Touchez pour voir ${textFirst ? 'la référence' : 'le texte'}</span></div>
+      <div class="face back"><span class="label">${textFirst ? 'Référence' : 'Texte'}</span><div class="text ${textFirst ? '' : 'long'}">${esc(back)}</div></div>
+    </button></div>
+    ${s.flipped ? `<div class="grades">
+      <button class="btn g0" data-act="grade" data-g="0">Encore<small>tout de suite</small></button>
+      <button class="btn g1" data-act="grade" data-g="1">Difficile<small>${INTERVALS[Math.max(1, c.lvl||0)]} j</small></button>
+      <button class="btn g2" data-act="grade" data-g="2">Bien<small>${INTERVALS[Math.min(MAXLVL, (c.lvl||0) + 1)]} j</small></button>
+      <button class="btn g3" data-act="grade" data-g="3">Facile<small>${INTERVALS[Math.min(MAXLVL, (c.lvl||0) + 2)]} j</small></button>
+    </div>` : `<div class="grades" style="visibility:hidden"><button class="btn">&nbsp;<small>&nbsp;</small></button></div>`}
+  </div></main>`;
+}
+function nextDueText(d) {
+  const future = d.cards.filter(c => !isDue(c)).map(c => c.due);
+  if (!future.length) return d.cards.some(isDue) ? 'maintenant' : 'aucun';
+  const days = Math.ceil((Math.min(...future) - now()) / DAY);
+  return days <= 1 ? 'demain' : `dans ${days} jours`;
+}
+
+function renderSettings() {
+  const m = bible.meta;
+  const bibleBlock = loading ? setupBlock() : bible.loaded
+    ? `<p><b>${esc(m.title)}</b><br><span class="muted small num">${m.verses.toLocaleString('fr-FR')} versets, ${m.chapters} chapitres, chargée le ${new Date(m.loadedAt).toLocaleDateString('fr-FR')}</span></p><div class="row"><button class="btn" data-act="loadEpub" data-tip="Remplacer par un autre fichier ePub">Recharger un ePub</button><button class="btn ghost danger sm" data-act="clearBible">Retirer la Bible</button></div>`
+    : `<p class="muted">Aucune Bible chargée.</p><button class="btn primary" data-act="loadEpub">Choisir le fichier ePub</button>`;
+  app.innerHTML = topbar('<h1>Réglages</h1>') + `<main><div class="scroll"><div class="wrap">
+    <div class="section"><h3>Bible</h3>${bibleBlock}</div>
+    <div class="section"><h3>Révision</h3>
+      <label class="check"><input type="checkbox" id="setAhead" ${settings.ahead ? 'checked' : ''}>Permettre de réviser en avance quand rien n'est dû</label>
+      <label class="check"><input type="checkbox" id="setTips" ${settings.tips ? 'checked' : ''}>Afficher les infobulles sur les boutons</label>
+    </div>
+    <div class="section"><h3>Mes paquets</h3>
+      <p class="small muted" style="margin:0">Le fichier de sauvegarde ne contient que vos références et votre progression, jamais le texte biblique. Il peut être envoyé à un autre téléphone et importé dans la même application.</p>
+      <div class="row"><button class="btn" data-act="exportAll" data-tip="Enregistrer ou partager un fichier avec tous les paquets">Sauvegarder mes paquets</button><button class="btn" data-act="importAll" data-tip="Lire un fichier de sauvegarde">Importer une sauvegarde</button></div>
+    </div>
+    <div class="section"><h3>Sur l'écran d'accueil</h3>
+      <p class="small muted" style="margin:0">Dans Chrome sur Android : menu ⋮, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ». L'application fonctionne ensuite hors connexion.</p>
+      <p class="small muted" style="margin:0">Mémo Versets ${APP_VERSION}</p>
+    </div>
+  </div></div></main>` + tabs('settings');
+  $('#setAhead').addEventListener('change', e => { settings.ahead = e.target.checked; saveSettings(); });
+  $('#setTips').addEventListener('change', e => { settings.tips = e.target.checked; saveSettings(); applyTips(); });
+}
+
+function applyTips() { document.querySelectorAll('[data-tip]').forEach(el => { if (settings.tips) el.title = el.dataset.tip; else el.removeAttribute('title'); }); }
+async function render() {
+  if (state.view === 'deck') await renderDeck();
+  else if (state.view === 'study') await renderStudy();
+  else if (state.view === 'decks') renderDecks();
+  else if (state.view === 'settings') renderSettings();
+  else renderLookup();
+  applyTips();
+}
+function go(view, push = true) {
+  state.view = view;
+  if (push) history.pushState({ view, deckId: state.deckId }, '');
+  render();
+}
+window.addEventListener('popstate', e => {
+  const st = e.state || { view: 'lookup' };
+  if (state.view === 'study') state.study = null;
+  state.view = st.view; if (st.deckId) state.deckId = st.deckId;
+  render();
+});
+
+/* ---------- Actions ---------- */
+let toastTimer;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800); }
+let loading = null;
+
+function startStudy(id) {
+  const d = state.decks[id];
+  if (!d || !d.cards.length) return;
+  if (!bible.loaded) { toast('Chargez d\'abord votre Bible dans les réglages'); return; }
+  let cards = d.cards.filter(isDue), ahead = false;
+  if (!cards.length) { if (!settings.ahead) { toast('Rien à revoir dans ce paquet'); return; } cards = d.cards.slice(); ahead = true; }
+  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]]; }
+  const side = {};
+  cards.forEach(c => { side[c.id] = d.dir === 'text' ? 'text' : d.dir === 'mix' ? (Math.random() < .5 ? 'text' : 'ref') : 'ref'; });
+  state.study = { deckId: id, queue: cards.map(c => c.id), done: 0, again: 0, flipped: false, side };
+  go('study');
+  if (ahead) toast('Révision en avance : tout le paquet');
+}
+function doGrade(g) {
+  const s = state.study; if (!s || !s.flipped) return;
+  const d = state.decks[s.deckId]; const id = s.queue.shift();
+  const c = d.cards.find(x => x.id === id);
+  if (c) { grade(c, g); persistDeck(d); }
+  if (g === 0) { s.queue.push(id); s.again++; } else s.done++;
+  s.flipped = false;
+  render();
+}
+
+const dlgDeck = $('#dlgDeck'), dlgCard = $('#dlgCard'), dlgImport = $('#dlgImport'), dlgText = $('#dlgText'), dlgPick = $('#dlgPick');
+let editingCard = null, renaming = false, pickRef = null;
+$('#vBook').innerHTML = BOOKS.map((b, i) => `<option value="${i + 1}">${b}</option>`).join('');
+function verseFormRef() {
+  const bk = +$('#vBook').value, ch = +$('#vCh').value, v1 = +$('#vV1').value, v2 = +$('#vV2').value || null;
+  if (!bk || !ch || !v1) return null;
+  return { bk, ch, v1, v2: v2 && v2 > v1 ? v2 : null };
+}
+async function updateVersePreview() {
+  const r = verseFormRef(); const box = $('#vPreview');
+  if (!r) { box.textContent = 'Indiquez livre, chapitre et verset.'; return; }
+  if (!bible.loaded) { box.textContent = refText(r) + ' (Bible non chargée, le texte apparaîtra après le chargement).'; return; }
+  const t = await verseText(r);
+  box.textContent = t || `${refText(r)} : ce passage n'existe pas.`;
+}
+['#vBook', '#vCh', '#vV1', '#vV2'].forEach(s => $(s).addEventListener('input', updateVersePreview));
+function openCardDialog(card) {
+  editingCard = card ? card.id : null;
+  $('#dlgCardTitle').textContent = card ? 'Modifier le verset' : 'Nouveau verset';
+  const r = card ? card.ref : null;
+  $('#vBook').value = r ? r.bk : settings.lastBook;
+  $('#vCh').value = r ? r.ch : ''; $('#vV1').value = r ? r.v1 : ''; $('#vV2').value = r && r.v2 ? r.v2 : '';
+  $('#addAnotherRow').hidden = !!card;
+  updateVersePreview();
+  dlgCard.showModal(); $('#vCh').focus();
+}
+function addRefToDeck(d, ref) {
+  if (d.cards.some(c => c.ref.bk === ref.bk && c.ref.ch === ref.ch && c.ref.v1 === ref.v1 && (c.ref.v2 || null) === (ref.v2 || null))) return false;
+  d.cards.push({ id: uid(), ref: { ...ref }, lvl: 0, n: 0, due: 0 });
+  return true;
+}
+function downloadJSON(name, obj) {
+  const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+  const file = new File([blob], name, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: name }).catch(() => {});
+    return;
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+
+const actions = {
+  tab(ds) { if (ds.tab === 'lookup') { state.found = null; if (state.lookup) doLookup(); } go(ds.tab); },
+  open(ds) { state.deckId = ds.id; state.filter = new Set(); go('deck'); },
+  study(ds) { startStudy(ds.id); },
+  quitStudy() { state.study = null; go('decks'); toast('Révision interrompue, vos réponses sont enregistrées'); },
+  example(ds) { state.lookup = ds.ref; doLookup(); },
+  loadEpub() { $('#fileEpub').value = ''; $('#fileEpub').click(); },
+  async clearBible() {
+    if (!confirm('Retirer la Bible de l\'application ? Vos paquets sont conservés ; il faudra recharger le fichier ePub pour revoir les textes.')) return;
+    await dbClear('chapters'); await dbDel('meta', 'bible'); bible.loaded = false; bible.meta = null; bible.cache.clear(); render(); toast('Bible retirée');
+  },
+  addToDeck() {
+    if (!state.found || state.found.html === null) return;
+    pickRef = state.found.ref;
+    $('#pickRef').textContent = refText(pickRef);
+    const decks = Object.values(state.decks).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    $('#pickDeck').innerHTML = (decks.length ? '' : '<option value="">(aucun paquet)</option>') + decks.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    if (settings.lastDeck && state.decks[settings.lastDeck]) $('#pickDeck').value = settings.lastDeck;
+    $('#pickNew').value = '';
+    dlgPick.showModal();
+  },
+  async copyVerse() {
+    if (!state.found) return;
+    const t = `${refText(state.found.ref)}\n${await verseText(state.found.ref)}`;
+    try { await navigator.clipboard.writeText(t); toast('Copié'); } catch (e) { $('#dlgTextTitle').textContent = refText(state.found.ref); $('#textArea').value = t; dlgText.showModal(); }
+  },
+  newDeck() { renaming = false; $('#dlgDeckTitle').textContent = 'Nouveau paquet'; $('#deckName').value = ''; dlgDeck.showModal(); },
+  renameDeck() { renaming = true; $('#dlgDeckTitle').textContent = 'Renommer le paquet'; $('#deckName').value = state.decks[state.deckId]?.name || ''; dlgDeck.showModal(); },
+  delDeck() {
+    const d = state.decks[state.deckId]; if (!d) return;
+    if (!confirm(`Supprimer le paquet « ${d.name} » et ses ${d.cards.length} versets ?`)) return;
+    removeDeck(d.id); go('decks'); toast('Paquet supprimé');
+  },
+  newCard() { openCardDialog(null); },
+  editCard(ds) { const c = state.decks[state.deckId]?.cards.find(x => x.id === ds.id); if (c) openCardDialog(c); },
+  delCard(ds) {
+    const d = state.decks[state.deckId]; const i = d.cards.findIndex(x => x.id === ds.id); if (i < 0) return;
+    if (!confirm(`Retirer ${refText(d.cards[i].ref)} du paquet ?`)) return;
+    d.cards.splice(i, 1); persistDeck(d); render();
+  },
+  filter(ds) { const k = ds.key, f = state.filter; if (f.has(k)) f.delete(k); else f.add(k); render(); },
+  import() { $('#importText').value = ''; dlgImport.showModal(); },
+  exportDeck() {
+    const d = state.decks[state.deckId]; if (!d) return;
+    $('#dlgTextTitle').textContent = 'Références de « ' + d.name + ' »';
+    $('#textArea').value = d.cards.map(c => refText(c.ref)).join('\n');
+    dlgText.showModal();
+  },
+  exportAll() {
+    const name = `memo-versets-${new Date().toISOString().slice(0, 10)}.json`;
+    downloadJSON(name, { app: 'memo-versets', v: 1, date: new Date().toISOString(), decks: Object.values(state.decks) });
+  },
+  importAll() { $('#fileDecks').value = ''; $('#fileDecks').click(); },
+  flip() { if (state.study) { state.study.flipped = !state.study.flipped; render(); } },
+  grade(ds) { doGrade(+ds.g); }
+};
+app.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  actions[b.dataset.act]?.(b.dataset, b, e);
+});
+document.addEventListener('keydown', e => {
+  if (state.view !== 'study' || document.querySelector('dialog[open]')) return;
+  const s = state.study; if (!s || !s.queue.length) return;
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); actions.flip(); }
+  else if (e.key >= '1' && e.key <= '4') doGrade(+e.key - 1);
+  else if (e.key === 'Escape') actions.quitStudy();
+});
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close('cancel')));
+
+$('#fileEpub').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  loading = { pct: 0, verses: 0 }; render();
+  try {
+    const buf = await file.arrayBuffer();
+    const meta = await loadEpub(buf, (p, v) => { loading = { pct: Math.round(p * 100), verses: v }; const bar = $('.progress i'); if (bar) bar.style.width = loading.pct + '%'; const txt = $('.setup .num'); if (txt) txt.textContent = `${loading.pct}% · ${v.toLocaleString('fr-FR')} versets lus`; });
+    loading = null; render();
+    toast(`Bible chargée : ${meta.verses.toLocaleString('fr-FR')} versets`);
+  } catch (err) {
+    loading = null; bible.loaded = !!(await dbGet('meta', 'bible')); render();
+    alert('Chargement impossible.\n\n' + (err && err.message ? err.message : err));
+  }
+});
+$('#fileDecks').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const decks = Array.isArray(data?.decks) ? data.decks : null;
+    if (!decks) throw new Error('Ce fichier n\'est pas une sauvegarde Mémo Versets.');
+    let n = 0;
+    decks.forEach(d => { if (d && d.id && d.name && Array.isArray(d.cards)) { d.cards = d.cards.filter(c => c && c.ref && c.ref.bk); persistDeck(d); n++; } });
+    go('decks'); toast(`${n} paquet${n > 1 ? 's' : ''} importé${n > 1 ? 's' : ''}`);
+  } catch (err) { alert('Import impossible.\n\n' + err.message); }
+});
+$('#formDeck').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'ok') return;
+  const name = $('#deckName').value.trim(); if (!name) { e.preventDefault(); return; }
+  if (renaming) { const d = state.decks[state.deckId]; if (d) { d.name = name; persistDeck(d); } }
+  else { const d = { id: uid(), name, dir: 'ref', cards: [], created: now(), updated: now() }; persistDeck(d); state.deckId = d.id; state.filter = new Set(); go('deck'); return; }
+  render();
+});
+$('#formCard').addEventListener('submit', async e => {
+  if (e.submitter?.value !== 'ok') return;
+  const d = state.decks[state.deckId]; if (!d) return;
+  const ref = verseFormRef();
+  if (!ref) { e.preventDefault(); toast('Indiquez le livre, le chapitre et le verset'); return; }
+  if (bible.loaded && !(await verseText(ref))) { e.preventDefault(); toast('Ce passage n\'existe pas'); return; }
+  settings.lastBook = ref.bk; saveSettings();
+  if (editingCard) { const c = d.cards.find(x => x.id === editingCard); if (c) c.ref = ref; }
+  else if (!addRefToDeck(d, ref)) { e.preventDefault(); toast('Ce passage est déjà dans le paquet'); return; }
+  persistDeck(d); render();
+  if (!editingCard && $('#addAnother').checked) {
+    e.preventDefault(); $('#vV1').value = ''; $('#vV2').value = ''; updateVersePreview(); $('#vV1').focus(); toast(`${refText(ref)} ajouté`);
+  }
+});
+$('#formPick').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'ok' || !pickRef) return;
+  let d; const newName = $('#pickNew').value.trim();
+  if (newName) { d = { id: uid(), name: newName, dir: 'ref', cards: [], created: now(), updated: now() }; }
+  else { d = state.decks[$('#pickDeck').value]; if (!d) { e.preventDefault(); toast('Choisissez un paquet ou donnez un nom'); return; } }
+  const added = addRefToDeck(d, pickRef);
+  persistDeck(d); settings.lastDeck = d.id; saveSettings();
+  toast(added ? `${refText(pickRef)} ajouté à « ${d.name} »` : 'Ce passage est déjà dans ce paquet');
+});
+$('#formImport').addEventListener('submit', e => {
+  if (e.submitter?.value !== 'ok') return;
+  const d = state.decks[state.deckId]; if (!d) return;
+  const lines = $('#importText').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let added = 0, skipped = 0, dup = 0;
+  lines.forEach(l => { const p = parseRef(l); if (!p) { skipped++; return; } if (addRefToDeck(d, p.ref)) added++; else dup++; });
+  if (!added) { e.preventDefault(); toast(skipped ? 'Aucune référence reconnue : vérifiez l\'écriture (ex. Jean 3:16)' : 'Tous ces passages sont déjà dans le paquet'); return; }
+  persistDeck(d); render();
+  toast(`${added} verset${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''}${dup ? `, ${dup} déjà présent${dup > 1 ? 's' : ''}` : ''}${skipped ? `, ${skipped} ligne${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : ''}`);
+});
+$('#btnCopyText').addEventListener('click', async () => {
+  const t = $('#textArea'); t.select();
+  try { await navigator.clipboard.writeText(t.value); toast('Copié'); } catch (e) { document.execCommand('copy'); toast('Texte sélectionné : copiez-le'); }
+});
+
+/* ---------- Démarrage ---------- */
+(async () => {
+  idb = await openDB();
+  const meta = await dbGet('meta', 'bible');
+  if (meta) { bible.meta = meta; bible.loaded = true; }
+  (await dbAll('decks')).forEach(d => { state.decks[d.id] = d; });
+  history.replaceState({ view: 'lookup' }, '');
+  render();
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+window.__memoVersets = { loadEpub, verseText, parseRef, bible, state };
+})();
+</script>
+</body>
+</html>
