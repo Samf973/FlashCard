@@ -237,7 +237,8 @@ dialog .check{color:var(--ink);font-size:1rem}
 <script>
 (() => {
 'use strict';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
+const APP_DATE = '14/09/2026';
 const INTERVALS = [0, 1, 2, 4, 8, 16, 32, 64]; // jours d'attente par niveau
 const MAXLVL = INTERVALS.length - 1;
 const KNOWN = 5;
@@ -472,7 +473,7 @@ function renderLookup() {
       ${result}
     </div>`;
   }
-  app.innerHTML = topbar() + `<main><div class="scroll"><div class="wrap">${body}</div></div></main>` + tabs('lookup');
+  app.innerHTML = topbar() + `<main><div class="scroll"><div class="wrap">${body}<p class="small muted num" style="margin-top:28px;text-align:center">Mémo Versets ${APP_VERSION}</p></div></div></main>` + tabs('lookup');
   const inp = $('#lookupInput');
   if (inp) {
     inp.addEventListener('input', () => { state.lookup = inp.value; lookupDebounced(); });
@@ -607,7 +608,10 @@ function renderSettings() {
     </div>
     <div class="section"><h3>Sur l'écran d'accueil</h3>
       <p class="small muted" style="margin:0">Dans Chrome sur Android : menu ⋮, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ». L'application fonctionne ensuite hors connexion.</p>
-      <p class="small muted" style="margin:0">Mémo Versets ${APP_VERSION}</p>
+    </div>
+    <div class="section"><h3>À propos</h3>
+      <p style="margin:0"><b>Mémo Versets, version <span class="num">${APP_VERSION}</span></b><br><span class="small muted">publiée le ${APP_DATE}</span></p>
+      <p class="small muted" style="margin:0">Une nouvelle version s'installe toute seule à l'ouverture suivante quand le téléphone est connecté. Comparez ce numéro entre vos appareils pour vérifier qu'ils sont à jour.</p>
     </div>
   </div></div></main>` + tabs('settings');
   $('#setAhead').addEventListener('change', e => { settings.ahead = e.target.checked; saveSettings(); });
@@ -851,7 +855,11 @@ $('#btnCopyText').addEventListener('click', async () => {
   (await dbAll('decks')).forEach(d => { state.decks[d.id] = d; });
   history.replaceState({ view: 'lookup' }, '');
   render();
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) toast('Nouvelle version installée : fermez et rouvrez l\'application'); hadController = true; });
+    navigator.serviceWorker.register('sw.js').then(reg => { reg.update().catch(() => {}); }).catch(() => {});
+  }
 })();
 window.__memoVersets = { loadEpub, verseText, parseRef, bible, state };
 })();
